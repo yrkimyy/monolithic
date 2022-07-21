@@ -9,8 +9,14 @@ module.exports = async function (fastify, opts) {
       `SELECT * FROM users WHERE loginname = '${loginname}' and password='${password}'`, []
     )
     connection.release()
+
+    const user = rows[0]
+    console.log(user)
     if(rows.length > 0) {
-      const token = fastify.jwt.sign({"id":rows[0].id, "loginname": loginname})
+      const redisResult = await fastify.redis.set(user.loginname, JSON.stringify(user))
+      console.log(redisResult)
+    
+      const token = fastify.jwt.sign({"id":user.id, "loginname": loginname})
       reply.send({ token })
     } else {
       reply.send("유효한 로그인네임과 패스워드가 아닙니다.").status(401)
@@ -30,8 +36,15 @@ module.exports = async function (fastify, opts) {
   }, 
   async function(request, reply) {
     console.log("request.user", request.user)
+    
+    const redisResult = await fastify.redis.get(request.user.loginname)
+    if(redisResult){
+      console.log("캐시 있음")
+      reply.send(redisResult)
+      return; 
+    }
+    console.log("캐시 없음")
     const connection = await fastify.mysql.getConnection()
-
     const [rows, fields] = await connection.query(
       `SELECT * FROM users WHERE id = '${request.user.id}'`, []
     )
